@@ -9,3 +9,4 @@ To change that modify in ```application.properties``` the fields:
 
 - Docker file
 - Fix bug in the EmailService
+- Adding a unit test for the schedule
