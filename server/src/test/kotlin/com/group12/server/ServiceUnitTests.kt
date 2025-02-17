@@ -2,21 +2,28 @@ package com.group12.server
 
 import com.group12.server.dto.RegistrationDTO
 import com.group12.server.dto.TokenDTO
+import com.group12.server.job.PruneExpiredDataJob
 import com.group12.server.repository.ActivationRepository
 import com.group12.server.repository.UserRepository
 import com.group12.server.service.impl.EmailServiceImpl
 import com.group12.server.service.impl.UserServiceImpl
 import org.junit.jupiter.api.Assertions
 import org.junit.jupiter.api.Test
+import org.mockito.Mockito.atLeast
+import org.mockito.Mockito.verify
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.mock.mockito.SpyBean
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.junit.jupiter.Container
 import org.testcontainers.junit.jupiter.Testcontainers
+import org.testcontainers.shaded.org.awaitility.Awaitility.await
+import org.testcontainers.shaded.org.awaitility.Durations
 import java.util.*
+
 
 @Testcontainers
 @SpringBootTest(webEnvironment=SpringBootTest.WebEnvironment.RANDOM_PORT)
@@ -44,6 +51,9 @@ class ServiceUnitTests {
     lateinit var userService: UserServiceImpl
     @Autowired
     lateinit var emailService: EmailServiceImpl
+
+    @SpyBean
+    lateinit var tasks: PruneExpiredDataJob
 
     @Test
     fun isValidPwdTest() {
@@ -212,6 +222,13 @@ class ServiceUnitTests {
             Assertions.assertEquals(email, message.to!![0])
             Assertions.assertTrue(message.text!!.contains(activationCode))
             Assertions.assertTrue(message.text!!.contains(nickname))
+        }
+    }
+
+    @Test
+    fun testPruneSchedule() {
+        await().atMost(Durations.TWO_MINUTES).untilAsserted {
+            verify(tasks, atLeast(1)).pruneExpiredRegistrationData()
         }
     }
 

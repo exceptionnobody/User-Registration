@@ -16,6 +16,7 @@ class RateLimiterInterceptor() : HandlerInterceptorAdapter() {
     private val limit = Bandwidth.classic(10, refill)
     // construct the bucket
     private val bucket: Bucket = Bucket.builder().addLimit(limit).build()
+
     override fun preHandle(request: HttpServletRequest, response: HttpServletResponse, handler: Any): Boolean {
         val probe: ConsumptionProbe = bucket.tryConsumeAndReturnRemaining(1)
         return if (probe.isConsumed) {
