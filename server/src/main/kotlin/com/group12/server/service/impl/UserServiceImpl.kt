@@ -5,27 +5,42 @@ import com.group12.server.dto.RegistrationDTO
 import com.group12.server.dto.TokenDTO
 import com.group12.server.dto.UserDTO
 import com.group12.server.entity.Activation
+import com.group12.server.entity.RoleEntity
 import com.group12.server.entity.User
 import com.group12.server.entity.toDTO
 import com.group12.server.repository.ActivationRepository
+import com.group12.server.repository.RoleRepository
 import com.group12.server.repository.UserRepository
+import com.group12.server.security.Role
 import com.group12.server.service.UserService
+import io.jsonwebtoken.Jwts
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder
 import org.springframework.stereotype.Service
 import java.util.*
+import javax.annotation.PostConstruct
+import javax.crypto.SecretKey
 
 @Service
 class UserServiceImpl: UserService {
 
     private val activationCodeSize = 6
     private val charRange : CharRange = '0'..'9'
-
+    @Autowired
+    lateinit var secretKey: SecretKey
     @Autowired
     lateinit var emailService: EmailServiceImpl
     @Autowired
     lateinit var userRepository: UserRepository
     @Autowired
     lateinit var activationRepository: ActivationRepository
+    @Autowired
+    lateinit var roleRepository : RoleRepository
+    @Autowired
+    lateinit var passwordEncoder : BCryptPasswordEncoder
+    @Value("\${token.duration.hours}")
+    var tokenDurationHours: Int? = null
 
     // Returns true if the password is valid, false otherwise
     override fun isValidPwd(pwd: String) : Boolean{
@@ -82,7 +97,8 @@ class UserServiceImpl: UserService {
     }
 
     override fun userReg(newUser: RegistrationDTO): ActivationDTO {
-        val tempUser = User(newUser.email, newUser.nickname, newUser.password, false)
+        val password = passwordEncoder.encode(newUser.password)
+        val tempUser = User(newUser.email, newUser.nickname, password, false)
         val savedUser = userRepository.save(tempUser)
         val activationCode = newActivationCode()
         val tempActivation = Activation(savedUser, newUser.email, activationCode)
@@ -116,8 +132,56 @@ class UserServiceImpl: UserService {
         }
         val user = activation.user
         user.validated = true
+        //create roles
+        if(!roleRepository.existsByRole(Role.CUSTOMER))
+        {
+            roleRepository.save(RoleEntity(mutableSetOf(),Role.CUSTOMER))
+        }
+        val role = roleRepository.findByRole(Role.CUSTOMER)
+        user.roles.add(role!!)
+        role.users.add(user)
+        roleRepository.save(role)
         userRepository.save(user)
         activationRepository.deleteById(UUID.fromString(token.provisional_id))
         return user.toDTO()
+    }
+
+    override fun login(username:String, password:String): String? {
+        val user = userRepository.findByNickname(username)
+        if (user!=null && passwordEncoder.matches(password, user.password)) {
+            val now = Calendar.getInstance()
+            val exp = Calendar.getInstance()
+            exp.add(Calendar.HOUR, tokenDurationHours!!)
+            println(user.roles.toString())
+            val claims = mapOf<String,Any>("sub" to user.nickname, "exp" to exp.time, "iat" to now.time, "roles" to user.roles.map { it.role }.toList())
+            return Jwts.builder().setClaims(claims).signWith(secretKey).compact()
+        }
+        return null
+    }
+
+    @PostConstruct
+    fun createAdmin() {
+        if (!roleRepository.existsByRole(Role.CUSTOMER))
+        {
+            roleRepository.save(RoleEntity(mutableSetOf(), Role.CUSTOMER))
+        }
+        if (!roleRepository.existsByRole(Role.ADMIN))
+        {
+            roleRepository.save(RoleEntity(mutableSetOf(), Role.ADMIN))
+        }
+        if(!userRepository.existsByNickname("admin"))
+        {
+            var admin = User("admin@email.com","admin", passwordEncoder.encode("admin"),true)
+            val roleC = roleRepository.findByRole(Role.CUSTOMER)
+            val roleA = roleRepository.findByRole(Role.ADMIN)
+            admin=userRepository.save(admin)
+            admin.roles.add(roleC!!)
+            admin.roles.add(roleA!!)
+            roleC.users.add(admin)
+            roleA.users.add(admin)
+            roleRepository.save(roleA)
+            roleRepository.save(roleC)
+            userRepository.save(admin)
+        }
     }
 }

@@ -14,4 +14,5 @@ interface UserService {
     fun newActivationCode() : String
     fun userReg(newUser: RegistrationDTO): ActivationDTO
     fun completedReg(token: TokenDTO) : UserDTO?
+    fun login(username:String, password:String) : String?
 }

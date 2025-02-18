@@ -1,6 +1,8 @@
 package com.group12.server.entity
 
 import com.group12.server.dto.UserDTO
+import org.hibernate.annotations.OnDelete
+import org.hibernate.annotations.OnDeleteAction
 import javax.persistence.*
 
 @Entity
@@ -14,6 +16,9 @@ class User(
     var password: String,
     @Column(nullable = false)
     var validated: Boolean = false,
+    @ManyToMany(fetch = FetchType.EAGER, cascade = [CascadeType.PERSIST])
+    @OnDelete(action = OnDeleteAction.CASCADE)
+    var roles : MutableSet<RoleEntity> = mutableSetOf(),
 ) {
     @Id
     @Column
